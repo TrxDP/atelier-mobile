@@ -1,0 +1,108 @@
+// Prisma Schema para Atelier Pro
+// Gestiona usuarios multi-tenant, perfiles de negocio escalables y modelos de datos híbridos (relacional + JSONB)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  OWNER
+  EMPLOYEE
+}
+
+enum TransactionStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum AssetStatus {
+  ACTIVE
+  MAINTENANCE
+  INACTIVE
+}
+
+enum PaymentMethod {
+  CASH
+  TRANSFER
+  CARD
+}
+
+model User {
+  id         String   @id @default(uuid())
+  email      String   @unique
+  password   String
+  role       Role     @default(EMPLOYEE)
+  businessId String?
+  business   Business? @relation(fields: [businessId], references: [id], onDelete: SetNull)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("users")
+}
+
+model Business {
+  id           String        @id @default(uuid())
+  name         String
+  // Define la configuración del esquema dinámico sin código para este negocio (ej. campos de formulario)
+  // Estructura sugerida: [{ name: "lavadora_asignada", type: "text", required: true }]
+  schemaConfig Json          @default("[]")
+  users        User[]
+  transactions Transaction[]
+  assets       Asset[]
+  payments     Payment[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@map("businesses")
+}
+
+model Transaction {
+  id          String            @id @default(uuid())
+  businessId  String
+  business    Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  status      TransactionStatus @default(PENDING)
+  totalAmount Decimal           @db.Decimal(10, 2)
+  // Guarda los atributos dinámicos ingresados por el usuario según el schemaConfig del Business
+  // Ejemplo: { lavadora_asignada: "Lavadora 3", tiempo_estimado: 45, estado_pago: "PENDIENTE" }
+  metadata    Json              @default("{}")
+  payments    Payment[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@map("transactions")
+}
+
+model Asset {
+  id         String      @id @default(uuid())
+  businessId String
+  business   Business    @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  name       String
+  type       String      // Ej: "WASHER" (Lavadora), "DRYER" (Secadora), "MOTORCYCLE" (Moto)
+  status     AssetStatus @default(ACTIVE)
+  // Propiedades adicionales del activo
+  metadata   Json        @default("{}")
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  @@map("assets")
+}
+
+model Payment {
+  id            String        @id @default(uuid())
+  transactionId String?
+  transaction   Transaction?  @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  businessId    String
+  business      Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  amount        Decimal       @db.Decimal(10, 2)
+  paymentMethod PaymentMethod @default(CASH)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@map("payments")
+}
